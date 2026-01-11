@@ -14,7 +14,7 @@ final class RecordingResult {
     var createdAt: Date
     var rawTranscript: String
     var title: String
-    var polishedText: String
+    var polishedText: String 
     
     init(id: UUID = UUID(), createdAt: Date = Date(), rawTranscript: String, title: String, polishedText: String) {
         self.id = id
