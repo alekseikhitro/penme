@@ -18,6 +18,8 @@ struct DetailsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingShareSheet = false
     @State private var showCopyNotification = false
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging = false
     
     let result: RecordingResult
     
@@ -46,7 +48,7 @@ struct DetailsView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                // Header with back icon, timestamp, and delete icon
+                // Header with back icon, timestamp, and delete icon (swipeable area)
                 HStack(alignment: .center, spacing: 16) {
                     // Back button
                     Button(action: {
@@ -80,6 +82,30 @@ struct DetailsView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 16)
+                .background(
+                    // Swipeable area in header
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 10)
+                                .onChanged { value in
+                                    if value.translation.height > 0 {
+                                        isDragging = true
+                                        dragOffset = value.translation.height
+                                    }
+                                }
+                                .onEnded { value in
+                                    isDragging = false
+                                    if value.translation.height > 100 || (value.translation.height > 50 && abs(value.velocity.height) > 500) {
+                                        dismiss()
+                                    } else {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            dragOffset = 0
+                                        }
+                                    }
+                                }
+                        )
+                )
                 
                 // Title input
                 TextField("Title", text: $title)
@@ -162,6 +188,7 @@ struct DetailsView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
+        .offset(y: dragOffset)
         .alert("Delete Recording?", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
