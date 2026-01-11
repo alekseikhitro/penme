@@ -1,0 +1,254 @@
+//
+//  DetailsView.swift
+//  PenAI
+//
+//  Created on 10/01/2026.
+//
+
+import SwiftUI
+import SwiftData
+import UIKit
+
+struct DetailsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var title: String
+    @State private var polishedText: String
+    @State private var showingDeleteConfirmation = false
+    @State private var showingShareSheet = false
+    @State private var showCopyNotification = false
+    
+    let result: RecordingResult
+    
+    init(result: RecordingResult) {
+        self.result = result
+        _title = State(initialValue: result.title)
+        _polishedText = State(initialValue: result.polishedText)
+    }
+    
+    private var formattedTimestamp: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        
+        if Calendar.current.isDateInToday(result.createdAt) {
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+            return formatter.string(from: result.createdAt)
+        } else {
+            formatter.dateStyle = .none
+            formatter.timeStyle = .none
+            formatter.setLocalizedDateFormatFromTemplate("MMMd")
+            return formatter.string(from: result.createdAt)
+        }
+    }
+    
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                // Header with back icon, timestamp, and delete icon
+                HStack(alignment: .center, spacing: 16) {
+                    // Back button
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    // Timestamp (centered)
+                    Text(formattedTimestamp)
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    // Delete button
+                    Button(action: {
+                        showingDeleteConfirmation = true
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+                
+                // Title input
+                TextField("Title", text: $title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+                
+                // Text content (flexible, takes all available space)
+                TextEditor(text: $polishedText)
+                    .font(.system(size: 16))
+                    .padding(12)
+                    .background(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Footer actions
+                HStack(spacing: 12) {
+                    // Copy button (first)
+                    ActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy",
+                        action: {
+                            UIPasteboard.general.string = polishedText
+                            withAnimation {
+                                showCopyNotification = true
+                            }
+                            // Hide notification after 2 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation {
+                                    showCopyNotification = false
+                                }
+                            }
+                        },
+                        style: .secondary
+                    )
+                    
+                    // Share button (second)
+                    ActionButton(
+                        icon: "square.and.arrow.up",
+                        label: "Share",
+                        action: {
+                            showingShareSheet = true
+                        },
+                        style: .secondary
+                    )
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            }
+            
+            // Copy notification at the top
+            if showCopyNotification {
+                VStack {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.white)
+                        Text("Text copied")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    Spacer()
+                }
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .alert("Delete Recording?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                delete()
+                dismiss()
+            }
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareSheet(items: [polishedText])
+        }
+        .onDisappear {
+            save()
+        }
+    }
+    
+    private func save() {
+        result.title = title
+        result.polishedText = polishedText
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving edits: \(error)")
+        }
+    }
+    
+    private func delete() {
+        modelContext.delete(result)
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting result: \(error)")
+        }
+    }
+}
+
+struct ActionButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+    let style: ButtonStyle
+    
+    enum ButtonStyle {
+        case primary
+        case secondary
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                Text(label)
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .foregroundColor(style == .primary ? .white : .primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(style == .primary ? Color.blue : Color(.systemGray6))
+            .cornerRadius(16)
+        }
+    }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // For iPad
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = UIView()
+        }
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // No update needed
+    }
+}
+
+#Preview {
+    NavigationStack {
+        DetailsView(result: RecordingResult(
+            rawTranscript: "This is a test transcript",
+            title: "Test Title",
+            polishedText: "This is polished text"
+        ))
+    }
+    .modelContainer(for: RecordingResult.self, inMemory: true)
+}

@@ -1,18 +1,18 @@
 //
 //  penmeApp.swift
-//  penme
+//  PenAI
 //
-//  Created by Aliaksei on 10/01/2026.
+//  Created on 10/01/2026.
 //
 
 import SwiftUI
 import SwiftData
 
 @main
-struct penmeApp: App {
+struct PenAIApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            RecordingResult.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +25,7 @@ struct penmeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            LibraryView()
         }
         .modelContainer(sharedModelContainer)
     }
