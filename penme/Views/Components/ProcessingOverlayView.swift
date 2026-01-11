@@ -1,6 +1,6 @@
 //
 //  ProcessingOverlayView.swift
-//  PenAI
+//  PenMe
 //
 //  Created on 10/01/2026.
 //
@@ -8,61 +8,33 @@
 import SwiftUI
 
 struct ProcessingOverlayView: View {
-    let stages = [
-        "Recognizing speech...",
-        "Transforming to text...",
-        "Structuring content...",
-        "Polishing final result..."
-    ]
-    
-    @State private var currentStage = 0
+    @State private var pulseOpacity: Double = 0.5
     
     var body: some View {
         ZStack {
-            // Blurred backdrop
-            Color.white.opacity(0.4)
+            // Transparent blurred backdrop
+            Color.clear
                 .background(.ultraThinMaterial)
                 .ignoresSafeArea()
             
-            VStack(spacing: 24) {
-                // Spinner
+            VStack(spacing: 32) {
+                // Spinning progress indicator
                 ProgressView()
                     .scaleEffect(2.0)
                     .tint(.blue)
                     .progressViewStyle(.circular)
                 
-                // Current stage text
-                Text(stages[currentStage])
+                // Pulsating text
+                Text("Running LLM Text Polishing...")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.gray)
-                    .id(currentStage) // Force re-animation
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                
-                // Progress dots
-                HStack(spacing: 8) {
-                    ForEach(0..<stages.count, id: \.self) { index in
-                        Circle()
-                            .fill(index <= currentStage ? Color.blue : Color.gray.opacity(0.3))
-                            .frame(width: 8, height: 8)
-                            .scaleEffect(index == currentStage ? 1.2 : 1.0)
-                            .animation(.spring(response: 0.3), value: currentStage)
-                    }
-                }
+                    .foregroundColor(.primary)
+                    .opacity(pulseOpacity)
             }
         }
         .onAppear {
-            startStageAnimation()
-        }
-    }
-    
-    private func startStageAnimation() {
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
-            withAnimation {
-                if currentStage < stages.count - 1 {
-                    currentStage += 1
-                } else {
-                    timer.invalidate()
-                }
+            // Start pulsating animation
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                pulseOpacity = 1.0
             }
         }
     }

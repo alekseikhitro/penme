@@ -54,9 +54,9 @@ struct RecordingOverlayView: View {
     
     var body: some View {
         ZStack {
-            // Blurred backdrop showing main screen
+            // Transparent blurred backdrop showing main screen
             Color.clear
-                .background(.thinMaterial)
+                .background(.ultraThinMaterial)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -119,23 +119,23 @@ struct RecordingOverlayView: View {
             
             // Cancel dialog
             .alert("Cancel recording?", isPresented: $showCancelDialog) {
+                Button("No", role: .cancel) { }
                 Button("Yes", role: .destructive) {
                     onCancel()
                 }
-                Button("No", role: .cancel) { }
             } message: {
-                Text("Recorded progress won't be saved. Cancel the recording?")
+                Text("Recorded progress won't be saved")
             }
             
-            // Restart dialog
-            .alert("Restart recording?", isPresented: $showRestartDialog) {
-                Button("Yes", role: .destructive) {
-                    onRestart()
+                // Restart dialog
+                .alert("Restart recording?", isPresented: $showRestartDialog) {
+                    Button("No", role: .cancel) { }
+                    Button("Yes", role: .destructive) {
+                        onRestart()
+                    }
+                } message: {
+                    Text("Recorded progress won't be saved")
                 }
-                Button("No", role: .cancel) { }
-            } message: {
-                Text("Recorded progress won't be saved. Restart the recording?")
-            }
         }
     }
     

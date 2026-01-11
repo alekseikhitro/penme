@@ -46,7 +46,7 @@ struct HeaderView: View {
     
     var shouldShowStatus: Bool {
         switch status {
-        case .idle, .completed:
+        case .idle, .completed, .recording:
             return false
         default:
             return true
@@ -56,7 +56,7 @@ struct HeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("PenAI")
+                Text("PenMe")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.primary)
                 

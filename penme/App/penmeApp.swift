@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct PenAIApp: App {
+struct PenMeApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             RecordingResult.self,

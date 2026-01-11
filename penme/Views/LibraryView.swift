@@ -95,23 +95,27 @@ struct LibraryView: View {
                     .transition(.opacity)
             }
             
-                // Mic button (hidden when editing or scrolling)
+                // Mic button (hidden when editing, scrolling, or processing)
                 if selectedResult == nil {
-                    VStack {
-                        Spacer()
-                        MicButtonView(
-                            isRecording: {
-                                if case .recording = speechService.state {
-                                    return true
+                    if case .processing = speechService.state {
+                        // Don't show mic button when processing
+                    } else {
+                        VStack {
+                            Spacer()
+                            MicButtonView(
+                                isRecording: {
+                                    if case .recording = speechService.state {
+                                        return true
+                                    }
+                                    return false
+                                }(),
+                                onTap: {
+                                    handleMicTap()
                                 }
-                                return false
-                            }(),
-                            onTap: {
-                                handleMicTap()
-                            }
-                        )
-                        .offset(y: isScrolling ? 120 : 0)
-                        .opacity(isScrolling ? 0 : 1)
+                            )
+                            .offset(y: isScrolling ? 120 : 0)
+                            .opacity(isScrolling ? 0 : 1)
+                        }
                     }
                 }
         }
@@ -123,7 +127,7 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("PenAI needs microphone and speech recognition permissions to record and transcribe your voice. Please enable them in Settings.")
+            Text("PenMe needs microphone and speech recognition permissions to record and transcribe your voice. Please enable them in Settings.")
         }
         .alert("Error", isPresented: $showingErrorAlert) {
             Button("OK") { }
@@ -175,10 +179,19 @@ struct LibraryView: View {
     
     private func stopMockRecording() {
         mockTimer.stop()
+        speechService.state = .idle // Close recording screen first
         
-        // Simulate completion with mocked transcript
-        let mockTranscript = "mock transcript"
-        handleTranscript(mockTranscript)
+        // Show processing screen, then handle transcript after delay
+        Task { @MainActor in
+            speechService.state = .processing
+            
+            // Wait 2 seconds to show processing screen
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            
+            // Simulate completion with mocked transcript
+            let mockTranscript = "mock transcript"
+            handleTranscript(mockTranscript)
+        }
     }
     
     private func handleStateChange(_ state: SpeechRecognitionState) {
