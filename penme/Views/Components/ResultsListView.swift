@@ -30,14 +30,10 @@ struct ResultsListView: View {
                         
                         if result.id != results.last?.id {
                             Divider()
-                                .padding(.leading, 20)
+                                .padding(.leading, 16)
                         }
                     }
                 }
-                .background(Color.white)
-                .cornerRadius(24)
-                .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 2)
-                .padding(.horizontal, 24)
                 .padding(.bottom, 32)
             }
         }
