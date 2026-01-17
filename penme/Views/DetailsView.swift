@@ -49,25 +49,38 @@ struct DetailsView: View {
     
     var body: some View {
         ZStack {
+            // Blurred background
+            Color.clear
+                .background(.ultraThinMaterial)
+                .ignoresSafeArea()
+            
             VStack(spacing: 0) {
                 // Header with back icon, timestamp, and delete icon (swipeable area)
-                HStack(alignment: .center, spacing: 16) {
+                HStack(alignment: .center, spacing: 12) {
                     // Back button
                     Button(action: {
                         dismiss()
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .frame(width: 44, height: 44)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color(.darkGray))
+                            .frame(width: 40, height: 40)
+                            .background(Color.white)
+                            .clipShape(Circle())
+                            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                     }
                     
                     Spacer()
                     
                     // Timestamp (centered)
                     Text(formattedTimestamp)
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color(.darkGray))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .cornerRadius(20)
+                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                     
                     Spacer()
                     
@@ -76,13 +89,16 @@ struct DetailsView: View {
                         showingDeleteConfirmation = true
                     }) {
                         Image(systemName: "trash")
-                            .font(.system(size: 18))
-                            .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color(.darkGray))
+                            .frame(width: 40, height: 40)
+                            .background(Color.white)
+                            .clipShape(Circle())
+                            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, 12)
                 .padding(.bottom, 16)
                 .background(
                     // Swipeable area in header
@@ -109,30 +125,35 @@ struct DetailsView: View {
                         )
                 )
                 
-                // Title input
-                TextField("Title", text: $title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(.systemGray4), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 16)
-                
-                // Text content (flexible, takes all available space)
-                TextEditor(text: $polishedText)
-                    .font(.system(size: 16))
-                    .padding(12)
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(.systemGray4), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Card container with title and text
+                VStack(spacing: 0) {
+                    // Title (single line, unscrollable)
+                    TextField("Title", text: $title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                    
+                    // Separator line
+                    Divider()
+                        .padding(.horizontal, 16)
+                    
+                    // Text content (flexible, takes all available space)
+                    TextEditor(text: $polishedText)
+                        .font(.system(size: 15))
+                        .foregroundColor(Color(.darkGray))
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(Color.white)
+                .cornerRadius(12)
+                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+                .padding(.horizontal, 16)
                 
                 // Footer actions
                 HStack(spacing: 12) {
@@ -151,8 +172,7 @@ struct DetailsView: View {
                                     showCopyNotification = false
                                 }
                             }
-                        },
-                        style: .secondary
+                        }
                     )
                     
                     // Share button (second)
@@ -161,11 +181,10 @@ struct DetailsView: View {
                         label: "Share",
                         action: {
                             showingShareSheet = true
-                        },
-                        style: .secondary
+                        }
                     )
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 16)
             }
             
@@ -232,26 +251,21 @@ struct ActionButton: View {
     let icon: String
     let label: String
     let action: () -> Void
-    let style: ButtonStyle
-    
-    enum ButtonStyle {
-        case primary
-        case secondary
-    }
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
-                Text(label)
                     .font(.system(size: 16, weight: .medium))
+                Text(label)
+                    .font(.system(size: 15, weight: .medium))
             }
-            .foregroundColor(style == .primary ? .white : .primary)
+            .foregroundColor(Color(.darkGray))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(style == .primary ? Color.blue : Color(.systemGray6))
-            .cornerRadius(16)
+            .padding(.vertical, 14)
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
         }
     }
 }
