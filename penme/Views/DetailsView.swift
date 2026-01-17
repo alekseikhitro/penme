@@ -167,9 +167,10 @@ struct DetailsView: View {
                 .padding(.vertical, 16)
             }
             
-            // Copy notification at the top
+            // Copy notification (centered)
             if showCopyNotification {
                 VStack {
+                    Spacer()
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.white)
@@ -181,8 +182,7 @@ struct DetailsView: View {
                     .padding(.vertical, 12)
                     .background(Color.black.opacity(0.8))
                     .cornerRadius(12)
-                    .padding(.top, 60)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.scale.combined(with: .opacity))
                     Spacer()
                 }
             }

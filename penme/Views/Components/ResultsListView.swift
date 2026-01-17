@@ -11,6 +11,7 @@ import SwiftData
 struct ResultsListView: View {
     let results: [RecordingResult]
     let onOpenDetail: (RecordingResult) -> Void
+    let onLongPress: (RecordingResult) -> Void
     @Binding var isScrolling: Bool
     @State private var scrollTask: Task<Void, Never>?
     
@@ -25,6 +26,9 @@ struct ResultsListView: View {
                             result: result,
                             onTap: {
                                 onOpenDetail(result)
+                            },
+                            onLongPress: {
+                                onLongPress(result)
                             }
                         )
                         
@@ -38,9 +42,16 @@ struct ResultsListView: View {
             }
         }
         .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    handleScrollStart()
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    // Only trigger scrolling if there's actual vertical movement
+                    let verticalMovement = abs(value.translation.height)
+                    if verticalMovement > 5 {
+                        handleScrollStart()
+                    }
+                }
+                .onEnded { _ in
+                    handleScrollEnd()
                 }
         )
     }
@@ -55,10 +66,15 @@ struct ResultsListView: View {
                 isScrolling = true
             }
         }
+    }
+    
+    private func handleScrollEnd() {
+        // Cancel previous task
+        scrollTask?.cancel()
         
-        // Set task to hide button when scrolling stops
+        // Set task to show button after scrolling stops
         scrollTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds delay
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds delay
             
             if !Task.isCancelled {
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -87,6 +103,7 @@ struct EmptyResultsView: View {
     ResultsListView(
         results: [],
         onOpenDetail: { _ in },
+        onLongPress: { _ in },
         isScrolling: .constant(false)
     )
 }

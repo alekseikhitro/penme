@@ -26,6 +26,7 @@ struct LibraryView: View {
     @State private var showingShareSheet = false
     @State private var shareText = ""
     @State private var isScrolling = false
+    @State private var showCopyNotification = false
     
     var body: some View {
         ZStack {
@@ -47,6 +48,20 @@ struct LibraryView: View {
                         results: results,
                         onOpenDetail: { result in
                             selectedResult = result
+                        },
+                        onLongPress: { result in
+                            // Copy text to clipboard
+                            UIPasteboard.general.string = result.polishedText
+                            // Show notification
+                            withAnimation {
+                                showCopyNotification = true
+                            }
+                            // Hide notification after 2 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation {
+                                    showCopyNotification = false
+                                }
+                            }
                         },
                         isScrolling: $isScrolling
                     )
@@ -93,6 +108,27 @@ struct LibraryView: View {
             if case .processing = speechService.state {
                 ProcessingOverlayView()
                     .transition(.opacity)
+            }
+            
+            // Copy notification (centered)
+            if showCopyNotification {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.white)
+                        Text("Text copied")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .transition(.scale.combined(with: .opacity))
+                    Spacer()
+                }
+                .zIndex(200)
             }
             
                 // Mic button (hidden when editing, scrolling, or processing)
