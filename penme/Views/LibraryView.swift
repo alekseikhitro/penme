@@ -27,6 +27,8 @@ struct LibraryView: View {
     @State private var isScrolling = false
     @State private var showCopyNotification = false
     @State private var showNoSpeechNotification = false
+    @State private var showDeleteNotification = false
+    @State private var deletedTitle = ""
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
@@ -101,7 +103,17 @@ struct LibraryView: View {
                     )
                 }
                 .navigationDestination(item: $selectedResult) { result in
-                    DetailsView(result: result)
+                    DetailsView(result: result) { deletedTitle in
+                        self.deletedTitle = deletedTitle
+                        withAnimation {
+                            showDeleteNotification = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            withAnimation {
+                                showDeleteNotification = false
+                            }
+                        }
+                    }
                 }
             }
             
@@ -183,6 +195,27 @@ struct LibraryView: View {
                 .zIndex(200)
             }
             
+            // Delete notification (centered)
+            if showDeleteNotification {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "trash.fill")
+                            .foregroundColor(.white)
+                        Text("\"\(deletedTitle)\" deleted")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .transition(.scale.combined(with: .opacity))
+                    Spacer()
+                }
+                .zIndex(200)
+            }
+            
                 // Mic button (hidden when editing, scrolling, or processing)
                 if selectedResult == nil {
                     if case .processing = speechService.state {
@@ -222,23 +255,32 @@ struct LibraryView: View {
         } message: {
             Text(errorMessage)
         }
-        .alert("Delete Recording", isPresented: $showingDeleteAlert) {
+        .alert(Text("Delete \"") + Text(resultToDelete?.title ?? "Recording").bold() + Text("\"?"), isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {
                 resultToDelete = nil
             }
             Button("Delete", role: .destructive) {
                 if let result = resultToDelete {
+                    let titleToShow = result.title
                     modelContext.delete(result)
                     do {
                         try modelContext.save()
+                        // Show delete notification
+                        deletedTitle = titleToShow
+                        withAnimation {
+                            showDeleteNotification = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            withAnimation {
+                                showDeleteNotification = false
+                            }
+                        }
                     } catch {
                         print("Error deleting result: \(error)")
                     }
                     resultToDelete = nil
                 }
             }
-        } message: {
-            Text("Are you sure you want to delete this recording? This action cannot be undone.")
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(items: [shareText])

@@ -22,9 +22,11 @@ struct DetailsView: View {
     @State private var isDragging = false
     
     let result: RecordingResult
+    var onDelete: ((String) -> Void)?
     
-    init(result: RecordingResult) {
+    init(result: RecordingResult, onDelete: ((String) -> Void)? = nil) {
         self.result = result
+        self.onDelete = onDelete
         _title = State(initialValue: result.title)
         _polishedText = State(initialValue: result.polishedText)
     }
@@ -189,7 +191,7 @@ struct DetailsView: View {
         }
         .navigationBarBackButtonHidden(true)
         .offset(y: dragOffset)
-        .alert("Delete Recording?", isPresented: $showingDeleteConfirmation) {
+        .alert(Text("Delete \"") + Text(result.title).bold() + Text("\"?"), isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 delete()
@@ -215,9 +217,11 @@ struct DetailsView: View {
     }
     
     private func delete() {
+        let titleToNotify = result.title
         modelContext.delete(result)
         do {
             try modelContext.save()
+            onDelete?(titleToNotify)
         } catch {
             print("Error deleting result: \(error)")
         }
