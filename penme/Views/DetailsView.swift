@@ -143,8 +143,8 @@ struct DetailsView: View {
                             withAnimation {
                                 showCopyNotification = true
                             }
-                            // Hide notification after 2 seconds
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            // Hide notification after 3 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                                 withAnimation {
                                     showCopyNotification = false
                                 }

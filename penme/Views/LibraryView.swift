@@ -15,7 +15,6 @@ struct LibraryView: View {
     
     @StateObject private var speechService = SpeechRecognizerService()
     private let polishService = PolishService()
-    @StateObject private var mockTimer = MockRecordingTimer()
     
     @State private var showingPermissionAlert = false
     @State private var showingErrorAlert = false
@@ -27,6 +26,7 @@ struct LibraryView: View {
     @State private var shareText = ""
     @State private var isScrolling = false
     @State private var showCopyNotification = false
+    @State private var showNoSpeechNotification = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
@@ -61,7 +61,7 @@ struct LibraryView: View {
             NavigationStack {
                 VStack(spacing: 0) {
                     // Header
-                    HeaderView(status: speechService.state)
+                    HeaderView()
                     
                     // Search field
                     SearchFieldView(
@@ -90,8 +90,8 @@ struct LibraryView: View {
                             withAnimation {
                                 showCopyNotification = true
                             }
-                            // Hide notification after 2 seconds
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            // Hide notification after 3 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                                 withAnimation {
                                     showCopyNotification = false
                                 }
@@ -108,29 +108,26 @@ struct LibraryView: View {
             // Recording overlay
             if case .recording = speechService.state {
                 RecordingOverlayView(
-                    duration: mockTimer.duration,
+                    duration: speechService.recordingDuration,
                     onCancel: {
                         Task { @MainActor in
                             // Cancel recording - just stop and reset, don't create record
-                            mockTimer.stop()
-                            speechService.state = .idle
+                            speechService.cancelRecording()
                         }
                     },
                     onStop: {
                         Task { @MainActor in
-                            // Stop recording and complete - create record
-                            stopMockRecording()
+                            // Stop recording and get transcript
+                            await stopRecordingAndTranscribe()
                         }
                     },
                     onRestart: {
                         // Restart recording from beginning - discard previous
                         Task { @MainActor in
-                            mockTimer.stop()
-                            speechService.state = .idle
+                            speechService.cancelRecording()
                             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
                             // Start fresh recording
-                            speechService.state = .recording
-                            mockTimer.start()
+                            await speechService.startRecording()
                         }
                     }
                 )
@@ -152,6 +149,27 @@ struct LibraryView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.white)
                         Text("Text copied")
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .transition(.scale.combined(with: .opacity))
+                    Spacer()
+                }
+                .zIndex(200)
+            }
+            
+            // No speech detected notification (centered)
+            if showNoSpeechNotification {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "waveform.slash")
+                            .foregroundColor(.white)
+                        Text("No speech detected")
                             .foregroundColor(.white)
                             .font(.system(size: 16, weight: .medium))
                     }
@@ -244,32 +262,38 @@ struct LibraryView: View {
         guard case .idle = speechService.state else {
             // If not idle, try to stop recording first
             if case .recording = speechService.state {
-                stopMockRecording()
+                Task {
+                    await stopRecordingAndTranscribe()
+                }
             }
             return
         }
         
-        // Start recording - user controls when to stop
+        // Start recording
         Task { @MainActor in
-            speechService.state = .recording
-            mockTimer.start()
+            await speechService.startRecording()
         }
     }
     
-    private func stopMockRecording() {
-        mockTimer.stop()
-        speechService.state = .idle // Close recording screen first
+    private func stopRecordingAndTranscribe() async {
+        // Stop recording and get transcript from speech service
+        let transcript = await speechService.stopRecording()
         
-        // Show processing screen, then handle transcript after delay
-        Task { @MainActor in
-            speechService.state = .processing
-            
-            // Wait 2 seconds to show processing screen
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            
-            // Simulate completion with mocked transcript
-            let mockTranscript = "mock transcript"
-            handleTranscript(mockTranscript)
+        // If we got a transcript, process it
+        if let transcript = transcript, !transcript.isEmpty {
+            handleTranscript(transcript)
+        } else {
+            // No transcript - show notification and reset
+            speechService.state = .idle
+            withAnimation {
+                showNoSpeechNotification = true
+            }
+            // Hide notification after 3 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation {
+                    showNoSpeechNotification = false
+                }
+            }
         }
     }
     
@@ -285,10 +309,24 @@ struct LibraryView: View {
                 }
             }
             
+            // Check if it's a "no speech" error - we handle this with our own notification
+            let errorDesc = error.localizedDescription.lowercased()
+            let isNoSpeechError = errorDesc.contains("no speech") || 
+                                  errorDesc.contains("no audio") ||
+                                  errorDesc.contains("kAFAssistantErrorDomain")
+            
+            if isNoSpeechError {
+                // Already handled by "No speech detected" notification
+                return
+            }
+            
             if let speechError = error as? SpeechRecognitionError {
                 switch speechError {
                 case .permissionDenied:
                     showingPermissionAlert = true
+                case .noTranscript:
+                    // Already handled by "No speech detected" notification
+                    break
                 default:
                     errorMessage = error.localizedDescription
                     showingErrorAlert = true
@@ -307,15 +345,45 @@ struct LibraryView: View {
     }
     
     private func handleTranscript(_ transcript: String) {
-        // Mock AI transformation - always return the same text
-        let mockTitle = "Text tittle"
-        let mockPolishedText = "Если хочешь, на следующем шаге можем сделать совсем конкретно: ты пишешь свою идею приложения (или 2–3 варианта), а я помогу её «разжать» в список экранов, коллекций данных и промптов, которые ты прям по шагам будешь копировать в Adalo и в чат со мной."
+        // Generate title from first few words of transcript
+        let title = generateTitle(from: transcript)
+        
+        // For now, use transcript directly as polished text
+        // TODO: Later this will be sent to LLM for polishing
+        let polishedText = transcript
         
         createRecord(
             rawTranscript: transcript,
-            title: mockTitle,
-            polishedText: mockPolishedText
+            title: title,
+            polishedText: polishedText
         )
+    }
+    
+    private func generateTitle(from transcript: String) -> String {
+        // Take first ~30 characters or first sentence, whichever is shorter
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Find first sentence end
+        let sentenceEnders: [Character] = [".", "!", "?"]
+        if let firstEnd = trimmed.firstIndex(where: { sentenceEnders.contains($0) }) {
+            let firstSentence = String(trimmed[...firstEnd])
+            if firstSentence.count <= 50 {
+                return firstSentence
+            }
+        }
+        
+        // Otherwise take first ~30 chars and add ellipsis
+        if trimmed.count <= 30 {
+            return trimmed
+        }
+        
+        // Find word boundary near 30 chars
+        let prefix = String(trimmed.prefix(30))
+        if let lastSpace = prefix.lastIndex(of: " ") {
+            return String(trimmed[..<lastSpace]) + "..."
+        }
+        
+        return prefix + "..."
     }
     
     private func createRecord(rawTranscript: String, title: String, polishedText: String) {

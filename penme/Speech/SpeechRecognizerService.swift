@@ -1,6 +1,6 @@
 //
 //  SpeechRecognizerService.swift
-//  PenAI
+//  PenMe
 //
 //  Created on 10/01/2026.
 //
@@ -28,7 +28,6 @@ enum SpeechRecognitionState: Equatable {
         case (.completed(let lhsText), .completed(let rhsText)):
             return lhsText == rhsText
         case (.error, .error):
-            // For error cases, just check if both are errors (don't compare Error values)
             return true
         default:
             return false
@@ -41,6 +40,7 @@ enum SpeechRecognitionError: LocalizedError {
     case recognitionUnavailable
     case audioEngineError(Error)
     case recognitionError(Error)
+    case noTranscript
     
     var errorDescription: String? {
         switch self {
@@ -52,6 +52,8 @@ enum SpeechRecognitionError: LocalizedError {
             return "Audio engine error: \(error.localizedDescription)"
         case .recognitionError(let error):
             return "Recognition error: \(error.localizedDescription)"
+        case .noTranscript:
+            return "No speech detected"
         }
     }
 }
@@ -68,22 +70,23 @@ class SpeechRecognizerService: NSObject, ObservableObject {
     
     private var recordingStartTime: Date?
     private var timer: Timer?
-    private var isStopping = false
     private var hasInstalledTap = false
+    
+    // Continuation for waiting on transcript result
+    private var transcriptContinuation: CheckedContinuation<String?, Never>?
     
     override init() {
         super.init()
-        
-        // Use device locale for recognition
         speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
         speechRecognizer?.delegate = self
     }
     
+    // MARK: - Public Methods
+    
+    /// Start recording and speech recognition
     func startRecording() async {
         // Prevent starting if already recording or processing
-        guard case .idle = state else {
-            return
-        }
+        guard case .idle = state else { return }
         
         // Reset state
         recordingDuration = 0
@@ -124,7 +127,13 @@ class SpeechRecognizerService: NSObject, ObservableObject {
             return
         }
         
+        // We want final results only (non-live transcription)
         recognitionRequest.shouldReportPartialResults = false
+        
+        // Enable on-device recognition if available (iOS 13+)
+        if #available(iOS 13, *) {
+            recognitionRequest.requiresOnDeviceRecognition = false
+        }
         
         // Configure audio input
         let inputNode = audioEngine.inputNode
@@ -141,86 +150,121 @@ class SpeechRecognizerService: NSObject, ObservableObject {
             try audioEngine.start()
         } catch {
             state = .error(SpeechRecognitionError.audioEngineError(error))
-            if hasInstalledTap {
-                inputNode.removeTap(onBus: 0)
-                hasInstalledTap = false
-            }
+            cleanupAudioResources()
             return
         }
         
-        // Start recognition
+        // Start recognition task
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    // Check if it's a cancellation (user cancelled)
+                    let nsError = error as NSError
+                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
+                        // User cancelled - just return nil
+                        self.transcriptContinuation?.resume(returning: nil)
+                        self.transcriptContinuation = nil
+                        return
+                    }
+                    
+                    // Real error
+                    self.transcriptContinuation?.resume(returning: nil)
+                    self.transcriptContinuation = nil
+                    self.state = .error(SpeechRecognitionError.recognitionError(error))
+                    return
+                }
+                
+                if let result = result, result.isFinal {
+                    let transcript = result.bestTranscription.formattedString
+                    self.transcriptContinuation?.resume(returning: transcript)
+                    self.transcriptContinuation = nil
+                }
+            }
+        }
+        
+        // Start recording
         state = .recording
         recordingStartTime = Date()
         startTimer()
-        
-        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                Task { @MainActor in
-                    self.stopRecording()
-                    self.state = .error(SpeechRecognitionError.recognitionError(error))
-                }
-                return
-            }
-            
-            if let result = result, result.isFinal {
-                let transcript = result.bestTranscription.formattedString
-                Task { @MainActor in
-                    self.stopRecording()
-                    self.state = .completed(transcript)
-                }
-            }
-        }
     }
     
-    func stopRecording() {
-        // Prevent multiple simultaneous stop calls
-        guard !isStopping else { return }
-        isStopping = true
-        defer { 
-            isStopping = false
-            // Always reset to idle after stopping
-            if case .recording = state {
-                state = .idle
-            } else if case .processing = state {
-                state = .idle
-            }
-        }
+    /// Stop recording and get the final transcript
+    /// Returns the transcript string, or nil if cancelled/error
+    func stopRecording() async -> String? {
+        guard case .recording = state else { return nil }
         
-        // Stop timer first
+        // Stop timer
         timer?.invalidate()
         timer = nil
         recordingStartTime = nil
         
-        // Cancel recognition task first to stop processing
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        
-        // End the recognition request
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-        
-        // Safely remove tap and stop engine
-        if hasInstalledTap {
-            let inputNode = audioEngine.inputNode
-            inputNode.removeTap(onBus: 0)
-            hasInstalledTap = false
-        }
-        
-        // Stop and reset audio engine
+        // Stop audio engine and remove tap first
         if audioEngine.isRunning {
             audioEngine.stop()
         }
-        audioEngine.reset()
-        
-        // Deactivate audio session
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            // Ignore deactivation errors
+        if hasInstalledTap {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasInstalledTap = false
         }
+        
+        // Signal end of audio to recognition request
+        recognitionRequest?.endAudio()
+        
+        // Change state to processing while we wait for transcript
+        state = .processing
+        
+        // Wait for the final transcript from the recognition task
+        let transcript = await withCheckedContinuation { continuation in
+            self.transcriptContinuation = continuation
+            
+            // Set a timeout - if no result in 5 seconds, return nil
+            Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if self.transcriptContinuation != nil {
+                    self.transcriptContinuation?.resume(returning: nil)
+                    self.transcriptContinuation = nil
+                }
+            }
+        }
+        
+        // Cleanup
+        recognitionRequest = nil
+        recognitionTask = nil
+        deactivateAudioSession()
+        
+        return transcript
     }
+    
+    /// Cancel recording without getting transcript
+    func cancelRecording() {
+        // Stop timer
+        timer?.invalidate()
+        timer = nil
+        recordingStartTime = nil
+        
+        // Cancel the recognition task
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // End audio
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        
+        // Clean up audio
+        cleanupAudioResources()
+        deactivateAudioSession()
+        
+        // Clear any pending continuation
+        transcriptContinuation?.resume(returning: nil)
+        transcriptContinuation = nil
+        
+        // Reset state
+        state = .idle
+    }
+    
+    // MARK: - Private Methods
     
     private func requestPermissions() async -> Bool {
         let micStatus = AVAudioSession.sharedInstance().recordPermission
@@ -250,36 +294,47 @@ class SpeechRecognizerService: NSObject, ObservableObject {
     
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self, let startTime = self.recordingStartTime else { return }
-            // Since class is @MainActor, this is already on main thread
-            self.recordingDuration = Date().timeIntervalSince(startTime)
+            Task { @MainActor [weak self] in
+                guard let self = self, let startTime = self.recordingStartTime else { return }
+                self.recordingDuration = Date().timeIntervalSince(startTime)
+            }
         }
-        // Ensure timer is on main run loop
         if let timer = timer {
             RunLoop.main.add(timer, forMode: .common)
         }
     }
     
-    deinit {
-        // Clean up synchronously - timer and audio engine cleanup
-        timer?.invalidate()
-        timer = nil
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    private func cleanupAudioResources() {
+        if hasInstalledTap {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasInstalledTap = false
+        }
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.reset()
+    }
+    
+    private func deactivateAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            // Ignore deactivation errors
+        }
+    }
+    
+    nonisolated deinit {
+        // Note: Can't access actor-isolated state in deinit
+        // The cleanup will be handled by ARC
     }
 }
 
 extension SpeechRecognizerService: SFSpeechRecognizerDelegate {
-    func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
-        if !available, case .recording = state {
-            Task { @MainActor in
-                stopRecording()
-                state = .error(SpeechRecognitionError.recognitionUnavailable)
+    nonisolated func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
+        Task { @MainActor in
+            if !available, case .recording = self.state {
+                self.cancelRecording()
+                self.state = .error(SpeechRecognitionError.recognitionUnavailable)
             }
         }
     }
