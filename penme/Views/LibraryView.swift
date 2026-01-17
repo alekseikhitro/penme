@@ -30,6 +30,24 @@ struct LibraryView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
+    // Normalize text for search
+    private func normalizeText(_ text: String) -> String {
+        let components = text.components(separatedBy: .whitespacesAndNewlines)
+        return components.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+    
+    // Count of filtered results for search counter
+    private var filteredResultsCount: Int {
+        if searchText.isEmpty {
+            return results.count
+        }
+        let lowercasedSearch = searchText.lowercased()
+        return results.filter { result in
+            result.title.lowercased().contains(lowercasedSearch) ||
+            normalizeText(result.polishedText).lowercased().contains(lowercasedSearch)
+        }.count
+    }
+    
     var body: some View {
         ZStack {
             // Background gradient
@@ -46,10 +64,15 @@ struct LibraryView: View {
                     HeaderView(status: speechService.state)
                     
                     // Search field
-                    SearchFieldView(searchText: $searchText, isFocused: $isSearchFocused)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                        .padding(.bottom, 8)
+                    SearchFieldView(
+                        searchText: $searchText,
+                        isFocused: $isSearchFocused,
+                        matchCount: filteredResultsCount,
+                        totalCount: results.count
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
                     
                     // Results list
                     ResultsListView(

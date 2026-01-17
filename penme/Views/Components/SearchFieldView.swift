@@ -10,6 +10,8 @@ import SwiftUI
 struct SearchFieldView: View {
     @Binding var searchText: String
     var isFocused: FocusState<Bool>.Binding
+    var matchCount: Int
+    var totalCount: Int
     
     var body: some View {
         HStack(spacing: 8) {
@@ -37,6 +39,14 @@ struct SearchFieldView: View {
             }
             
             Spacer()
+            
+            // Results counter (visible when searching)
+            if !searchText.isEmpty {
+                Text("\(matchCount)/\(totalCount)")
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                    .transition(.opacity)
+            }
             
             // Clear button (visible when there's text)
             if !searchText.isEmpty {
@@ -67,8 +77,8 @@ struct SearchFieldPreview: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            SearchFieldView(searchText: $text1, isFocused: $focus1)
-            SearchFieldView(searchText: $text2, isFocused: $focus2)
+            SearchFieldView(searchText: $text1, isFocused: $focus1, matchCount: 0, totalCount: 10)
+            SearchFieldView(searchText: $text2, isFocused: $focus2, matchCount: 3, totalCount: 25)
         }
         .padding()
     }
