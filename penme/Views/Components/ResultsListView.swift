@@ -10,20 +10,36 @@ import SwiftData
 
 struct ResultsListView: View {
     let results: [RecordingResult]
+    let searchText: String
     let onOpenDetail: (RecordingResult) -> Void
     let onLongPress: (RecordingResult) -> Void
     @Binding var isScrolling: Bool
     @State private var scrollTask: Task<Void, Never>?
     
+    // Filter results based on search text
+    private var filteredResults: [RecordingResult] {
+        if searchText.isEmpty {
+            return results
+        }
+        let lowercasedSearch = searchText.lowercased()
+        return results.filter { result in
+            result.title.lowercased().contains(lowercasedSearch) ||
+            result.polishedText.lowercased().contains(lowercasedSearch)
+        }
+    }
+    
     var body: some View {
         ScrollView {
             if results.isEmpty {
                 EmptyResultsView()
+            } else if filteredResults.isEmpty {
+                NoSearchResultsView()
             } else {
                 VStack(spacing: 0) {
-                    ForEach(results) { result in
+                    ForEach(filteredResults) { result in
                         ResultItemView(
                             result: result,
+                            searchText: searchText,
                             onTap: {
                                 onOpenDetail(result)
                             },
@@ -32,7 +48,7 @@ struct ResultsListView: View {
                             }
                         )
                         
-                        if result.id != results.last?.id {
+                        if result.id != filteredResults.last?.id {
                             Divider()
                                 .padding(.leading, 16)
                         }
@@ -99,9 +115,25 @@ struct EmptyResultsView: View {
     }
 }
 
+struct NoSearchResultsView: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 32))
+                .foregroundColor(.secondary)
+                .padding(.bottom, 4)
+            Text("No notes found")
+                .font(.system(size: 16))
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 48)
+    }
+}
+
 #Preview {
     ResultsListView(
         results: [],
+        searchText: "",
         onOpenDetail: { _ in },
         onLongPress: { _ in },
         isScrolling: .constant(false)

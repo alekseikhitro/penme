@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ResultItemView: View {
     let result: RecordingResult
+    let searchText: String
     let onTap: () -> Void
     let onLongPress: () -> Void
     
@@ -117,6 +118,7 @@ struct ResultItemView: View {
                 title: "This is a very long title that should be truncated if it doesn't fit on the screen",
                 polishedText: "This is a test note with some text that should be truncated if it's too long."
             ),
+            searchText: "",
             onTap: {},
             onLongPress: {}
         )

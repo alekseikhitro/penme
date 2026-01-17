@@ -27,6 +27,8 @@ struct LibraryView: View {
     @State private var shareText = ""
     @State private var isScrolling = false
     @State private var showCopyNotification = false
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     
     var body: some View {
         ZStack {
@@ -43,13 +45,22 @@ struct LibraryView: View {
                     // Header
                     HeaderView(status: speechService.state)
                     
+                    // Search field
+                    SearchFieldView(searchText: $searchText, isFocused: $isSearchFocused)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                    
                     // Results list
                     ResultsListView(
                         results: results,
+                        searchText: searchText,
                         onOpenDetail: { result in
+                            isSearchFocused = false // Dismiss keyboard
                             selectedResult = result
                         },
                         onLongPress: { result in
+                            isSearchFocused = false // Dismiss keyboard
                             // Copy text to clipboard
                             UIPasteboard.general.string = result.polishedText
                             // Show notification
@@ -194,9 +205,18 @@ struct LibraryView: View {
         .onChange(of: speechService.state) { oldValue, newValue in
             handleStateChange(newValue)
         }
+        .onChange(of: isScrolling) { oldValue, newValue in
+            // Dismiss keyboard when scrolling starts
+            if newValue {
+                isSearchFocused = false
+            }
+        }
     }
     
     private func handleMicTap() {
+        // Dismiss keyboard
+        isSearchFocused = false
+        
         // Prevent multiple simultaneous recordings
         guard case .idle = speechService.state else {
             // If not idle, try to stop recording first
