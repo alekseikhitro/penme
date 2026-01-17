@@ -9,40 +9,25 @@ import SwiftUI
 import SwiftData
 
 struct ResultsListView: View {
-    let results: [RecordingResult]
-    let searchText: String
+    let results: [RecordingResult] // Already filtered by LibraryView
+    let searchText: String // Used for highlighting in ResultItemView
+    let totalResultsCount: Int // Total count to determine if we show "no results" or "no matches"
     let onOpenDetail: (RecordingResult) -> Void
     let onLongPress: (RecordingResult) -> Void
     @Binding var isScrolling: Bool
     @State private var scrollTask: Task<Void, Never>?
     
-    // Normalize text - remove newlines and extra whitespace
-    private func normalizeText(_ text: String) -> String {
-        let components = text.components(separatedBy: .whitespacesAndNewlines)
-        return components.filter { !$0.isEmpty }.joined(separator: " ")
-    }
-    
-    // Filter results based on search text
-    private var filteredResults: [RecordingResult] {
-        if searchText.isEmpty {
-            return results
-        }
-        let lowercasedSearch = searchText.lowercased()
-        return results.filter { result in
-            result.title.lowercased().contains(lowercasedSearch) ||
-            normalizeText(result.polishedText).lowercased().contains(lowercasedSearch)
-        }
-    }
-    
     var body: some View {
         ScrollView {
-            if results.isEmpty {
+            if totalResultsCount == 0 {
+                // No cards at all
                 EmptyResultsView()
-            } else if filteredResults.isEmpty {
+            } else if results.isEmpty {
+                // Cards exist but none match filter
                 NoSearchResultsView()
             } else {
                 VStack(spacing: 0) {
-                    ForEach(filteredResults) { result in
+                    ForEach(results) { result in
                         ResultItemView(
                             result: result,
                             searchText: searchText,
@@ -54,7 +39,7 @@ struct ResultsListView: View {
                             }
                         )
                         
-                        if result.id != filteredResults.last?.id {
+                        if result.id != results.last?.id {
                             Divider()
                                 .padding(.leading, 16)
                         }
@@ -140,6 +125,7 @@ struct NoSearchResultsView: View {
     ResultsListView(
         results: [],
         searchText: "",
+        totalResultsCount: 0,
         onOpenDetail: { _ in },
         onLongPress: { _ in },
         isScrolling: .constant(false)

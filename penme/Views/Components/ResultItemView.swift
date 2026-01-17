@@ -230,13 +230,26 @@ struct ResultItemView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Title and timestamp in the same row
-            HStack(alignment: .center, spacing: 12) {
+            // Title, label, and timestamp in the same row
+            HStack(alignment: .center, spacing: 8) {
                 highlightedTitle
                     .lineLimit(1)
                     .truncationMode(.tail)
                 
                 Spacer()
+                
+                // Label badge (to the left of timestamp)
+                if let label = result.label {
+                    Text(label)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color(.systemGray5))
+                        )
+                }
                 
                 Text(formattedTimestamp)
                     .font(.system(size: 13))
@@ -299,7 +312,7 @@ struct ResultItemView: View {
 
 #Preview {
     VStack(spacing: 0) {
-        // Without search
+        // Without search, without label
         ResultItemView(
             result: RecordingResult(
                 rawTranscript: "Test",
@@ -313,26 +326,28 @@ struct ResultItemView: View {
         
         Divider()
         
-        // With search matching in text
+        // With label
         ResultItemView(
             result: RecordingResult(
                 rawTranscript: "Test",
-                title: "Meeting Notes",
-                polishedText: "This is a test note with some important text that should demonstrate the search highlighting feature when searching."
+                title: "Project Ideas",
+                polishedText: "This is a test note with some important text that should demonstrate the label display feature and how text wraps around it nicely.",
+                label: "VibeCoding"
             ),
-            searchText: "important",
+            searchText: "",
             onTap: {},
             onLongPress: {}
         )
         
         Divider()
         
-        // With search matching in title
+        // With search matching in text
         ResultItemView(
             result: RecordingResult(
                 rawTranscript: "Test",
-                title: "Important Meeting Notes",
-                polishedText: "This is a test note with some text."
+                title: "Meeting Notes",
+                polishedText: "This is a test note with some important text that should demonstrate the search highlighting feature when searching.",
+                label: "Personal"
             ),
             searchText: "important",
             onTap: {},

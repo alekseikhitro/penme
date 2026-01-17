@@ -15,23 +15,29 @@ struct DetailsView: View {
     
     @State private var title: String
     @State private var polishedText: String
+    @State private var label: String?
     @State private var showingDeleteConfirmation = false
     @State private var showingShareSheet = false
+    @State private var isEditingLabel = false
+    @State private var labelText = ""
     @State private var showCopyNotification = false
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
     
     @FocusState private var isTitleFocused: Bool
     @FocusState private var isTextFocused: Bool
+    @FocusState private var isLabelFocused: Bool
     
     let result: RecordingResult
     var onDelete: ((String) -> Void)?
     
+    // Get unique labels from all cards
     init(result: RecordingResult, onDelete: ((String) -> Void)? = nil) {
         self.result = result
         self.onDelete = onDelete
         _title = State(initialValue: result.title)
         _polishedText = State(initialValue: result.polishedText)
+        _label = State(initialValue: result.label)
     }
     
     private var formattedTimestamp: String {
@@ -144,16 +150,129 @@ struct DetailsView: View {
                     Divider()
                         .padding(.horizontal, 16)
                     
-                    // Text content (flexible, takes all available space)
-                    TextEditor(text: $polishedText)
-                        .font(.system(size: 15))
-                        .foregroundColor(Color(.darkGray))
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .focused($isTextFocused)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Text content with label overlay
+                    ZStack(alignment: .bottomTrailing) {
+                        // Text content (flexible, takes all available space)
+                        TextEditor(text: $polishedText)
+                            .font(.system(size: 15))
+                            .foregroundColor(Color(.darkGray))
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .focused($isTextFocused)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
+                            .padding(.bottom, 28) // Space for label button
+                        
+                        // Label area at bottom right
+                        HStack {
+                            Spacer()
+                            if isEditingLabel {
+                                // Inline text field for label
+                                HStack(spacing: 4) {
+                                    TextField("Label", text: $labelText)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .focused($isLabelFocused)
+                                        .frame(minWidth: 60, maxWidth: 120)
+                                        .onSubmit {
+                                            saveLabel()
+                                        }
+                                        .onChange(of: labelText) { _, newValue in
+                                            // Limit to 15 characters
+                                            if newValue.count > 15 {
+                                                labelText = String(newValue.prefix(15))
+                                            }
+                                        }
+                                    
+                                    Button(action: {
+                                        saveLabel()
+                                    }) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(
+                                                LinearGradient(
+                                                    colors: [Color.blue, Color.purple],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                            } else if let currentLabel = label {
+                                // Show current label with remove button
+                                HStack(spacing: 4) {
+                                    Button(action: {
+                                        labelText = currentLabel
+                                        isEditingLabel = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            isLabelFocused = true
+                                        }
+                                    }) {
+                                        Text(currentLabel)
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    Button(action: {
+                                        label = nil
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.gray)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                            } else {
+                                // Show add label button
+                                Button(action: {
+                                    labelText = ""
+                                    isEditingLabel = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        isLabelFocused = true
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .medium))
+                                        Text("Add label")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                        .background(
+                            // Gradient fade from white to transparent
+                            LinearGradient(
+                                colors: [Color.white, Color.white.opacity(0)],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                            .frame(height: 50)
+                            .allowsHitTesting(false),
+                            alignment: .bottom
+                        )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .background(Color.white)
                 .cornerRadius(12)
@@ -228,16 +347,32 @@ struct DetailsView: View {
         .onDisappear {
             save()
         }
+        .onChange(of: isLabelFocused) { oldValue, newValue in
+            // Save label when focus is lost (tapped outside)
+            if oldValue == true && newValue == false && isEditingLabel {
+                saveLabel()
+            }
+        }
     }
     
     private func save() {
         result.title = title
         result.polishedText = polishedText
+        result.label = label
         do {
             try modelContext.save()
         } catch {
             print("Error saving edits: \(error)")
         }
+    }
+    
+    private func saveLabel() {
+        let trimmed = labelText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            label = trimmed
+        }
+        isEditingLabel = false
+        isLabelFocused = false
     }
     
     private func delete() {

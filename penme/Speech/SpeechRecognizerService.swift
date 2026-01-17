@@ -264,6 +264,124 @@ class SpeechRecognizerService: NSObject, ObservableObject {
         state = .idle
     }
     
+    /// Restart recording - cancel current and start fresh without going through idle state
+    func restartRecording() async {
+        // Stop timer
+        timer?.invalidate()
+        timer = nil
+        recordingStartTime = nil
+        
+        // Cancel the recognition task
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // End audio
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        
+        // Clean up audio
+        cleanupAudioResources()
+        deactivateAudioSession()
+        
+        // Clear any pending continuation
+        transcriptContinuation?.resume(returning: nil)
+        transcriptContinuation = nil
+        
+        // Reset duration but keep recording state visible
+        recordingDuration = 0
+        
+        // Small delay to let audio session fully release
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        
+        // Start fresh recording directly (bypass normal startRecording)
+        await startRecordingInternal()
+    }
+    
+    /// Internal start recording - used by restart to bypass idle check
+    private func startRecordingInternal() async {
+        // Check availability
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            state = .error(SpeechRecognitionError.recognitionUnavailable)
+            return
+        }
+        
+        // Configure audio session
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            state = .error(SpeechRecognitionError.audioEngineError(error))
+            return
+        }
+        
+        // Create recognition request
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        guard let recognitionRequest = recognitionRequest else {
+            state = .error(SpeechRecognitionError.recognitionUnavailable)
+            return
+        }
+        
+        recognitionRequest.shouldReportPartialResults = true
+        if #available(iOS 16, *) {
+            recognitionRequest.addsPunctuation = true
+        }
+        
+        // Get input node
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        // Install tap
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+        
+        // Start audio engine
+        do {
+            audioEngine.prepare()
+            try audioEngine.start()
+        } catch {
+            cleanupAudioResources()
+            state = .error(SpeechRecognitionError.audioEngineError(error))
+            return
+        }
+        
+        // Start recognition task
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    // Check if it's a cancellation (user cancelled)
+                    let nsError = error as NSError
+                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
+                        // User cancelled - just return nil
+                        self.transcriptContinuation?.resume(returning: nil)
+                        self.transcriptContinuation = nil
+                        return
+                    }
+                    
+                    // Real error
+                    self.transcriptContinuation?.resume(returning: nil)
+                    self.transcriptContinuation = nil
+                    self.state = .error(SpeechRecognitionError.recognitionError(error))
+                    return
+                }
+                
+                if let result = result, result.isFinal {
+                    let transcript = result.bestTranscription.formattedString
+                    self.transcriptContinuation?.resume(returning: transcript)
+                    self.transcriptContinuation = nil
+                }
+            }
+        }
+        
+        // Update state and start timer
+        state = .recording
+        recordingStartTime = Date()
+        startTimer()
+    }
+    
     // MARK: - Private Methods
     
     private func requestPermissions() async -> Bool {

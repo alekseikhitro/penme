@@ -30,6 +30,7 @@ struct LibraryView: View {
     @State private var showDeleteNotification = false
     @State private var deletedTitle = ""
     @State private var searchText = ""
+    @State private var selectedLabel: String? = nil // nil means "All"
     @FocusState private var isSearchFocused: Bool
     
     // Normalize text for search
@@ -38,16 +39,76 @@ struct LibraryView: View {
         return components.filter { !$0.isEmpty }.joined(separator: " ")
     }
     
-    // Count of filtered results for search counter
-    private var filteredResultsCount: Int {
+    // Get unique labels from all cards (sorted alphabetically)
+    private var uniqueLabels: [String] {
+        let labels = results.compactMap { $0.label }
+        return Array(Set(labels)).sorted()
+    }
+    
+    // Get count of cards per label (respecting current search filter)
+    private var labelCounts: [String: Int] {
+        var counts: [String: Int] = [:]
+        let filteredBySearch = searchFilteredResults
+        for result in filteredBySearch {
+            if let label = result.label {
+                counts[label, default: 0] += 1
+            }
+        }
+        return counts
+    }
+    
+    // Labels to show in panel (hide labels with 0 results when searching)
+    private var visibleLabels: [String] {
         if searchText.isEmpty {
-            return results.count
+            return uniqueLabels
+        }
+        // When searching, only show labels that have at least 1 matching result
+        return uniqueLabels.filter { label in
+            (labelCounts[label] ?? 0) > 0
+        }
+    }
+    
+    // Results filtered by search only (used for label counts)
+    private var searchFilteredResults: [RecordingResult] {
+        if searchText.isEmpty {
+            return results
         }
         let lowercasedSearch = searchText.lowercased()
         return results.filter { result in
             result.title.lowercased().contains(lowercasedSearch) ||
             normalizeText(result.polishedText).lowercased().contains(lowercasedSearch)
-        }.count
+        }
+    }
+    
+    // Results filtered by both label and search
+    private var filteredResults: [RecordingResult] {
+        var filtered = results
+        
+        // Filter by label first
+        if let selectedLabel = selectedLabel {
+            filtered = filtered.filter { $0.label == selectedLabel }
+        }
+        
+        // Then filter by search
+        if !searchText.isEmpty {
+            let lowercasedSearch = searchText.lowercased()
+            filtered = filtered.filter { result in
+                result.title.lowercased().contains(lowercasedSearch) ||
+                normalizeText(result.polishedText).lowercased().contains(lowercasedSearch)
+            }
+        }
+        
+        return filtered
+    }
+    
+    // Count of filtered results for search counter
+    private var filteredResultsCount: Int {
+        return filteredResults.count
+    }
+    
+    // Total count for "All" label (respecting search filter)
+    private var totalCountForAll: Int {
+        return searchFilteredResults.count
     }
     
     var body: some View {
@@ -70,16 +131,27 @@ struct LibraryView: View {
                         searchText: $searchText,
                         isFocused: $isSearchFocused,
                         matchCount: filteredResultsCount,
-                        totalCount: results.count
+                        totalCount: selectedLabel == nil ? results.count : (results.filter { $0.label == selectedLabel }.count)
                     )
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .padding(.bottom, 8)
                     
+                    // Label panel (only show if labels exist, hide when all have 0 results during search)
+                    if !uniqueLabels.isEmpty && (searchText.isEmpty || !visibleLabels.isEmpty) {
+                        LabelPanelView(
+                            labels: visibleLabels,
+                            labelCounts: labelCounts,
+                            totalCount: totalCountForAll,
+                            selectedLabel: $selectedLabel
+                        )
+                    }
+                    
                     // Results list
                     ResultsListView(
-                        results: results,
+                        results: filteredResults,
                         searchText: searchText,
+                        totalResultsCount: results.count,
                         onOpenDetail: { result in
                             isSearchFocused = false // Dismiss keyboard
                             selectedResult = result
@@ -136,10 +208,7 @@ struct LibraryView: View {
                     onRestart: {
                         // Restart recording from beginning - discard previous
                         Task { @MainActor in
-                            speechService.cancelRecording()
-                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-                            // Start fresh recording
-                            await speechService.startRecording()
+                            await speechService.restartRecording()
                         }
                     }
                 )
