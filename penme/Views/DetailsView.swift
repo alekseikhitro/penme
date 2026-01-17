@@ -21,6 +21,9 @@ struct DetailsView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
     
+    @FocusState private var isTitleFocused: Bool
+    @FocusState private var isTextFocused: Bool
+    
     let result: RecordingResult
     var onDelete: ((String) -> Void)?
     
@@ -132,6 +135,7 @@ struct DetailsView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .focused($isTitleFocused)
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
                         .padding(.bottom, 8)
@@ -146,6 +150,7 @@ struct DetailsView: View {
                         .foregroundColor(Color(.darkGray))
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
+                        .focused($isTextFocused)
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

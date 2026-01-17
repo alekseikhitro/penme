@@ -27,6 +27,7 @@ struct SearchFieldView: View {
                     Text("Search")
                         .font(.system(size: 17))
                         .foregroundColor(.gray)
+                        .allowsHitTesting(false) // Allow taps to pass through to TextField
                 }
                 
                 // Actual text field

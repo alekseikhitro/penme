@@ -83,7 +83,7 @@ struct ResultItemView: View {
     
     // Compute context text with ellipsis around the match
     // Shows match at the beginning of 2nd row (~45 chars before match for 1 row)
-    // Total ~180 chars for 4 rows
+    // Total ~180 chars for 4 rows - always tries to show 4 full rows if text is long enough
     private func getContextAroundMatch() -> String? {
         // Normalize text first - remove line breaks and extra whitespace
         let text = normalizeText(result.polishedText)
@@ -93,14 +93,17 @@ struct ResultItemView: View {
         guard let range = textLower.range(of: searchLower) else { return nil }
         
         let matchStart = text.distance(from: text.startIndex, to: range.lowerBound)
+        let textLength = text.count
         
         // Approximately 45 chars per row, we want match at start of 2nd row
         // So show ~45 chars before match (1 row), unless match is near the beginning
         let charsBeforeMatch = 45
         let totalChars = 180 // ~4 rows worth of text
         
-        // Calculate start position - show 1 row before match (for 2nd row positioning)
-        let startPos: Int
+        var startPos: Int
+        var endPos: Int
+        
+        // First, try to position match at start of 2nd row
         if matchStart <= charsBeforeMatch {
             // Match is near the beginning, start from 0
             startPos = 0
@@ -109,10 +112,26 @@ struct ResultItemView: View {
             startPos = matchStart - charsBeforeMatch
         }
         
-        let startIndex = text.index(text.startIndex, offsetBy: startPos)
+        // Calculate end position
+        endPos = min(textLength, startPos + totalChars)
         
-        // Calculate end position for ~4 rows total
-        let endPos = min(text.count, startPos + totalChars)
+        // If we can't show 4 full rows after startPos, adjust startPos backwards
+        // to ensure we show as much content as possible (up to 4 rows)
+        let actualContentLength = endPos - startPos
+        if actualContentLength < totalChars && textLength >= totalChars {
+            // We have enough text but not showing 4 full rows
+            // Move startPos back to show more content before the match
+            startPos = max(0, textLength - totalChars)
+            endPos = textLength
+        } else if actualContentLength < totalChars && startPos > 0 {
+            // Text is shorter than 4 rows but we're not starting from beginning
+            // Move startPos back as much as possible
+            let additionalNeeded = totalChars - actualContentLength
+            let canMoveBack = min(startPos, additionalNeeded)
+            startPos = startPos - canMoveBack
+        }
+        
+        let startIndex = text.index(text.startIndex, offsetBy: startPos)
         let endIndex = text.index(text.startIndex, offsetBy: endPos)
         
         // Extract context
@@ -122,7 +141,7 @@ struct ResultItemView: View {
         if startPos > 0 {
             contextText = "..." + contextText
         }
-        if endPos < text.count {
+        if endPos < textLength {
             contextText = contextText + "..."
         }
         
