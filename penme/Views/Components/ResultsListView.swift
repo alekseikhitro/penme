@@ -16,6 +16,12 @@ struct ResultsListView: View {
     @Binding var isScrolling: Bool
     @State private var scrollTask: Task<Void, Never>?
     
+    // Normalize text - remove newlines and extra whitespace
+    private func normalizeText(_ text: String) -> String {
+        let components = text.components(separatedBy: .whitespacesAndNewlines)
+        return components.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+    
     // Filter results based on search text
     private var filteredResults: [RecordingResult] {
         if searchText.isEmpty {
@@ -24,7 +30,7 @@ struct ResultsListView: View {
         let lowercasedSearch = searchText.lowercased()
         return results.filter { result in
             result.title.lowercased().contains(lowercasedSearch) ||
-            result.polishedText.lowercased().contains(lowercasedSearch)
+            normalizeText(result.polishedText).lowercased().contains(lowercasedSearch)
         }
     }
     

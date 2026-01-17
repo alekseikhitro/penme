@@ -32,6 +32,8 @@ struct SearchFieldView: View {
                     .font(.system(size: 17))
                     .foregroundColor(.primary)
                     .focused(isFocused)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
             
             Spacer()
