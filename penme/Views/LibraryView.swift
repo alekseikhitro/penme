@@ -123,19 +123,13 @@ struct LibraryView: View {
             
             NavigationStack {
                 VStack(spacing: 0) {
-                    // Header
-                    HeaderView()
-                    
-                    // Search field
-                    SearchFieldView(
+                    // Header with integrated search
+                    HeaderView(
                         searchText: $searchText,
                         isFocused: $isSearchFocused,
                         matchCount: filteredResultsCount,
                         totalCount: selectedLabel == nil ? results.count : (results.filter { $0.label == selectedLabel }.count)
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 8)
                     
                     // Label panel (only show if labels exist, hide when all have 0 results during search)
                     if !uniqueLabels.isEmpty && (searchText.isEmpty || !visibleLabels.isEmpty) {
