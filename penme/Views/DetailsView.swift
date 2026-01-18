@@ -161,45 +161,56 @@ struct DetailsView: View {
                             .focused($isTextFocused)
                             .padding(.horizontal, 12)
                             .padding(.top, 8)
-                            .padding(.bottom, 28) // Space for label button
+                            .padding(.bottom, 0)
                         
                         // Label area at bottom right
                         HStack {
                             Spacer()
                             if isEditingLabel {
-                                // Inline text field for label
+                                // Inline text field for label - matches empty state exactly
                                 HStack(spacing: 4) {
-                                    TextField("Label", text: $labelText)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.secondary)
-                                        .textInputAutocapitalization(.never)
-                                        .autocorrectionDisabled()
-                                        .focused($isLabelFocused)
-                                        .frame(minWidth: 60, maxWidth: 120)
-                                        .onSubmit {
-                                            saveLabel()
-                                        }
-                                        .onChange(of: labelText) { _, newValue in
-                                            // Limit to 15 characters
-                                            if newValue.count > 15 {
-                                                labelText = String(newValue.prefix(15))
-                                            }
-                                        }
-                                    
-                                    Button(action: {
-                                        saveLabel()
-                                    }) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 14))
-                                            .foregroundStyle(
-                                                LinearGradient(
-                                                    colors: [Color.blue, Color.purple],
-                                                    startPoint: .topLeading,
-                                                    endPoint: .bottomTrailing
-                                                )
-                                            )
+                                    if labelText.isEmpty {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.secondary)
                                     }
-                                    .buttonStyle(.plain)
+                                    
+                                    ZStack(alignment: .leading) {
+                                        if labelText.isEmpty {
+                                            Text("Add label")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundColor(.secondary)
+                                                .allowsHitTesting(false)
+                                        }
+                                        
+                                        TextField("", text: $labelText)
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                            .textInputAutocapitalization(.never)
+                                            .autocorrectionDisabled()
+                                            .focused($isLabelFocused)
+                                            .fixedSize(horizontal: true, vertical: false)
+                                            .onSubmit {
+                                                saveLabel()
+                                            }
+                                            .onChange(of: labelText) { _, newValue in
+                                                if newValue.count > 15 {
+                                                    labelText = String(newValue.prefix(15))
+                                                }
+                                            }
+                                    }
+                                    .frame(minWidth: 56, alignment: .leading) // Match "Add label" text width
+                                    
+                                    if !labelText.isEmpty {
+                                        Button(action: {
+                                            saveLabel()
+                                        }) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.gray)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
