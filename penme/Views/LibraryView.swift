@@ -128,7 +128,8 @@ struct LibraryView: View {
                         searchText: $searchText,
                         isFocused: $isSearchFocused,
                         matchCount: filteredResultsCount,
-                        totalCount: selectedLabel == nil ? results.count : (results.filter { $0.label == selectedLabel }.count)
+                        totalCount: selectedLabel == nil ? results.count : (results.filter { $0.label == selectedLabel }.count),
+                        isScrolling: $isScrolling
                     )
                     
                     // Label panel (only show if labels exist, hide when all have 0 results during search)
@@ -168,6 +169,15 @@ struct LibraryView: View {
                         isScrolling: $isScrolling
                     )
                 }
+                .simultaneousGesture(
+                    TapGesture()
+                        .onEnded { _ in
+                            // Dismiss search when tapping on any area (if empty)
+                            if searchText.isEmpty && isSearchFocused {
+                                isSearchFocused = false
+                            }
+                        }
+                )
                 .navigationDestination(item: $selectedResult) { result in
                     DetailsView(result: result) { deletedTitle in
                         self.deletedTitle = deletedTitle
